@@ -13,7 +13,7 @@ class Program
 
         using var server = new WebServer(url)
             .WithAction("/", HttpVerb.Get,
-                ctx => ctx.SendStringAsync("Hello from console server!", "text/plain", Encoding.UTF8));
+                ctx => ctx.SendStringAsync("Hello from Server!", "text/plain", Encoding.UTF8));
 
         await server.RunAsync(); 
     }
