@@ -11,7 +11,7 @@ using EmbedIO.Routing;
 
 class Program
 {
-    private static readonly Dictionary<string, AnimationData> AnimationCache = new();
+    private static readonly Dictionary<string, PrecomputedAnimation> AnimationCache = new();
     private static readonly object CacheLock = new object();
 
     static async Task Main()
@@ -38,7 +38,7 @@ class Program
                         return;
                     }
 
-                    await StreamAnimationAsync(ctx, animData);
+                    await StreamPrecomputedAnimationAsync(ctx, animData);
                 }
                 catch (Exception ex)
                 {
@@ -53,7 +53,7 @@ class Program
         Console.ReadLine();
     }
 
-    private static async Task<AnimationData> LoadAnimationAsync(string animName)
+    private static async Task<PrecomputedAnimation> LoadAnimationAsync(string animName)
     {
         lock (CacheLock)
         {
@@ -70,20 +70,21 @@ class Program
         try
         {
             var json = await File.ReadAllTextAsync(filePath);
-            var animData = JsonSerializer.Deserialize<AnimationData>(json);
+            var rawAnimData = JsonSerializer.Deserialize<AnimationData>(json);
 
-            animData = PreprocessAnimation(animData);
+            var processedAnimData = PreprocessAnimation(rawAnimData);
+            var precomputedAnim = PrecomputeFrames(processedAnimData);
 
-            var estimatedSize = EstimateAnimationMemoryUsage(animData);
-            if (estimatedSize < 10 * 1024 * 1024)
+            var estimatedSize = EstimatePrecomputedMemoryUsage(precomputedAnim);
+            if (estimatedSize < 50 * 1024 * 1024)
             {
                 lock (CacheLock)
                 {
-                    AnimationCache[animName] = animData;
+                    AnimationCache[animName] = precomputedAnim;
                 }
             }
 
-            return animData;
+            return precomputedAnim;
         }
         catch (Exception ex)
         {
@@ -132,43 +133,41 @@ class Program
         };
     }
 
-    private static async Task StreamAnimationAsync(IHttpContext ctx, AnimationData animData)
+    private static PrecomputedAnimation PrecomputeFrames(AnimationData animData)
     {
-        const int BUFFER_SIZE = 8192;
-        var buffer = new StringBuilder(BUFFER_SIZE);
+        var compiledFrames = new byte[animData.frames.Length][];
 
-        using var writer = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8, BUFFER_SIZE);
+        for (int i = 0; i < animData.frames.Length; i++)
+        {
+            var frameText = string.Join("\n", animData.frames[i]) + "\n\n";
+            compiledFrames[i] = Encoding.UTF8.GetBytes(frameText);
+        }
 
-        int frameDelay = animData.framerate;
-        var frames = animData.frames;
+        return new PrecomputedAnimation
+        {
+            CompiledFrames = compiledFrames,
+            FrameDelay = CalculateAdaptiveDelay(animData.frames[0], animData.framerate)
+        };
+    }
 
-        int adaptiveDelay = CalculateAdaptiveDelay(frames[0], frameDelay);
+    private static async Task StreamPrecomputedAnimationAsync(IHttpContext ctx, PrecomputedAnimation animData)
+    {
+        var outputStream = ctx.Response.OutputStream;
 
         while (!ctx.CancellationToken.IsCancellationRequested)
         {
-            for (int frameIndex = 0; frameIndex < frames.Length; frameIndex++)
+            for (int frameIndex = 0; frameIndex < animData.CompiledFrames.Length; frameIndex++)
             {
                 if (ctx.CancellationToken.IsCancellationRequested)
                     break;
 
-                var frame = frames[frameIndex];
-
-                buffer.Clear();
-
-                for (int i = 0; i < frame.Length; i++)
-                {
-                    buffer.AppendLine(frame[i]);
-                }
-                buffer.AppendLine();
-
-                var frameContent = buffer.ToString();
-
                 try
                 {
-                    await writer.WriteAsync(frameContent);
-                    await writer.FlushAsync();
+                    var frameBytes = animData.CompiledFrames[frameIndex];
+                    await outputStream.WriteAsync(frameBytes, 0, frameBytes.Length, ctx.CancellationToken);
+                    await outputStream.FlushAsync(ctx.CancellationToken);
 
-                    await Task.Delay(adaptiveDelay, ctx.CancellationToken);
+                    await Task.Delay(animData.FrameDelay, ctx.CancellationToken);
                 }
                 catch (Exception ex) when (ex is ObjectDisposedException || ex is IOException)
                 {
@@ -196,23 +195,11 @@ class Program
             return Math.Max(baseDelay, 16);
     }
 
-    private static long EstimateAnimationMemoryUsage(AnimationData animData)
+    private static long EstimatePrecomputedMemoryUsage(PrecomputedAnimation animData)
     {
-        if (animData?.frames == null)
+        if (animData?.CompiledFrames == null)
             return 0;
 
-        long totalSize = 0;
-        foreach (var frame in animData.frames)
-        {
-            if (frame != null)
-            {
-                foreach (var line in frame)
-                {
-                    totalSize += (line?.Length ?? 0) * 2;
-                }
-            }
-        }
-
-        return totalSize;
+        return animData.CompiledFrames.Sum(frame => frame?.Length ?? 0);
     }
 }
