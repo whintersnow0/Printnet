@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Text;
+using System.Threading.Tasks;
 using EmbedIO;
 using EmbedIO.Actions;
 
 class Program
 {
-    static void Main()
+    static async Task Main()
     {
         var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
         var url = $"http://*:{port}/";
@@ -14,9 +15,6 @@ class Program
             .WithAction("/", HttpVerb.Get,
                 ctx => ctx.SendStringAsync("Hello from console server!", "text/plain", Encoding.UTF8));
 
-        server.RunAsync(); 
-
-        Console.WriteLine($"Server running on port {port}. Press Enter to exit.");
-        Console.ReadLine();
+        await server.RunAsync(); 
     }
 }
