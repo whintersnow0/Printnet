@@ -30,14 +30,10 @@ class Program
                     return;
                 }
                 var json = await File.ReadAllTextAsync(filePath);
-
-                int frameDelay;
-                string[][] frames;
-
                 var animData = JsonSerializer.Deserialize<AnimationData>(json);
-                frameDelay = animData.framerate;
-                frames = animData.frames;
-
+                int frameDelay = animData.framerate;
+                string[][] frames = animData.frames;
+                int squareSize = Math.Min(frames[0].Length, frames[0][0].Length);
                 using var writer = new StreamWriter(ctx.Response.OutputStream, Encoding.UTF8);
                 while (!ctx.CancellationToken.IsCancellationRequested)
                 {
@@ -45,7 +41,11 @@ class Program
                     {
                         if (ctx.CancellationToken.IsCancellationRequested)
                             break;
-                        var frameStr = string.Join("\n", frame);
+                        var squareFrame = frame
+                            .Take(squareSize)
+                            .Select(line => line.Length > squareSize ? line.Substring(0, squareSize) : line.PadRight(squareSize))
+                            .ToArray();
+                        var frameStr = string.Join("\n", squareFrame);
                         await writer.WriteAsync(frameStr + "\n\n");
                         await writer.FlushAsync();
                         await Task.Delay(frameDelay, ctx.CancellationToken);
