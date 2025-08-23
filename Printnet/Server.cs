@@ -1,30 +1,22 @@
 ﻿using System;
-using System.Net;
 using System.Text;
+using EmbedIO;
+using EmbedIO.Actions;
 
-class Server
+class Program
 {
     static void Main()
     {
-        HttpListener listener = new HttpListener();
-        listener.Prefixes.Add("http://localhost:5000/");
-        listener.Start();
-        Console.WriteLine("Server started. Waiting for requests...");
+        var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+        var url = $"http://*:{port}/";
 
-        while (true)
-        {
-            HttpListenerContext context = listener.GetContext();
-            HttpListenerRequest request = context.Request;
+        using var server = new WebServer(url)
+            .WithAction("/", HttpVerb.Get,
+                ctx => ctx.SendStringAsync("Hello from console server!", "text/plain", Encoding.UTF8));
 
-            Console.WriteLine($"Received request: {request.HttpMethod} {request.Url}");
+        server.RunAsync(); 
 
-            string responseString = "Hello from the console server!";
-            byte[] buffer = Encoding.UTF8.GetBytes(responseString);
-
-            HttpListenerResponse response = context.Response;
-            response.ContentLength64 = buffer.Length;
-            response.OutputStream.Write(buffer, 0, buffer.Length);
-            response.OutputStream.Close();
-        }
+        Console.WriteLine($"Server running on port {port}. Press Enter to exit.");
+        Console.ReadLine();
     }
 }
