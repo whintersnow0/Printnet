@@ -21,7 +21,7 @@ class Program
                 ctx.Response.Headers.Add("Cache-Control", "no-cache");
                 ctx.Response.Headers.Add("Connection", "keep-alive");
                 var animName = ctx.Request.Url.Segments.Last().TrimEnd('/');
-                var animsFolder = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Anims");
+                var animsFolder = Path.Combine(AppContext.BaseDirectory, "Anims");
                 var filePath = Path.Combine(animsFolder, $"{animName}.json");
                 if (!File.Exists(filePath))
                 {

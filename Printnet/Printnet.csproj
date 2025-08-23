@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="EmbedIO" Version="3.4.0" />
+	<Content Include="Anims\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
 </Project>
